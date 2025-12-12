@@ -1,13 +1,21 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173", // Your Local Frontend
+      "https://vein-client.vercel.app", // Your Vercel Link (Add this later)
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // MongoDB URI
@@ -73,7 +81,15 @@ async function run() {
       res.send(result);
     });
 
-    // 3. Create Donation Request API
+    // 3. Get Specific Request Details API
+    app.get("/donation-requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await requestsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // 4. Create Donation Request API
     app.post("/donation-requests", async (req, res) => {
       const request = req.body;
 
@@ -88,7 +104,7 @@ async function run() {
       res.send(result);
     });
 
-    // 4. Search Donors API (Public)
+    // 5. Search Donors API (Public)
     app.get("/donors", async (req, res) => {
       const { bloodGroup, district, upazila } = req.query;
 
@@ -110,6 +126,36 @@ async function run() {
     });
 
     // ----------------------------------------------------------------- //
+
+    // 1. POST User
+    app.post("/donors", async (req, res) => {
+      const user = req.body;
+
+      // 1. Check if user already exists
+      const query = { email: user.email };
+      const existingUser = await usersCollection.findOne(query);
+
+      if (existingUser) {
+        return res.send({ message: "User already exists", insertedId: null });
+      }
+
+      // 2. Prepare user data with required defaults
+      const userToSave = {
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        bloodGroup: user.bloodGroup,
+        district: user.district,
+        upazila: user.upazila,
+        role: "donor",
+        status: "active",
+        createdAt: new Date(),
+      };
+
+      // 3. Save to Database
+      const result = await usersCollection.insertOne(userToSave);
+      res.send(result);
+    });
 
     // === Ping MongoDB ===
     console.log("Connected to MongoDB! (Vein Database)");
