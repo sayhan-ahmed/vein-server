@@ -37,27 +37,27 @@ async function run() {
     await client.connect();
 
     const db = client.db("vein");
-    const usersCollection = db.collection("users"); 
+    const usersCollection = db.collection("users");
     const requestsCollection = db.collection("donationRequests");
 
     // ================= ROUTES ================= //
 
     // 1. POST User (Registration)
-    app.post('/users', async (req, res) => {
+    app.post("/users", async (req, res) => {
       const newUser = req.body;
       const query = { email: newUser.email };
       const existingUser = await usersCollection.findOne(query);
 
       if (existingUser) {
-        return res.send({ message: 'User already exists', insertedId: null });
+        return res.send({ message: "User already exists", insertedId: null });
       }
 
       // Enforce default fields
       const userToSave = {
         ...newUser,
-        role: 'donor',
-        status: 'active',
-        createdAt: new Date()
+        role: "donor",
+        status: "active",
+        createdAt: new Date(),
       };
 
       const result = await usersCollection.insertOne(userToSave);
@@ -66,25 +66,45 @@ async function run() {
 
     // 2. GET All Requests (Public)
     app.get("/donation-requests", async (req, res) => {
-      const result = await requestsCollection.find().sort({ createdAt: -1 }).toArray();
+      const result = await requestsCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
       res.send(result);
     });
 
-    // 3. Search Donors API (Public)
-    app.get('/donors', async (req, res) => {
+    // 3. Create Donation Request API
+    app.post("/donation-requests", async (req, res) => {
+      const request = req.body;
+
+      // Force status to pending regardless of what is sent
+      const newRequest = {
+        ...request,
+        donationStatus: "pending",
+        createdAt: new Date(),
+      };
+
+      const result = await requestsCollection.insertOne(newRequest);
+      res.send(result);
+    });
+
+    // 4. Search Donors API (Public)
+    app.get("/donors", async (req, res) => {
       const { bloodGroup, district, upazila } = req.query;
 
       // Base Query: Only show active donors
-      let query = { role: 'donor', status: 'active' };
+      let query = { role: "donor", status: "active" };
 
       // Add filters if provided
       if (bloodGroup) query.bloodGroup = bloodGroup;
       if (district) query.district = district;
       if (upazila) query.upazila = upazila;
 
-      const result = await usersCollection.find(query, {
-        projection: { password: 0 }
-      }).toArray();
+      const result = await usersCollection
+        .find(query, {
+          projection: { password: 0 },
+        })
+        .toArray();
 
       res.send(result);
     });
