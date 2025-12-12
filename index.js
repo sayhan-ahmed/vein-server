@@ -31,18 +31,61 @@ app.get("/", (req, res) => {
   res.send("Vein API is running!");
 });
 
-
 async function run() {
   try {
     // Connect to MongoDB
     await client.connect();
 
     const db = client.db("vein");
-    const requestsCol = db.collection("donation-requests");
+    const usersCollection = db.collection("users"); 
+    const requestsCollection = db.collection("donationRequests");
 
-    // === GET all requests (public) ===
+    // ================= ROUTES ================= //
+
+    // 1. POST User (Registration)
+    app.post('/users', async (req, res) => {
+      const newUser = req.body;
+      const query = { email: newUser.email };
+      const existingUser = await usersCollection.findOne(query);
+
+      if (existingUser) {
+        return res.send({ message: 'User already exists', insertedId: null });
+      }
+
+      // Enforce default fields
+      const userToSave = {
+        ...newUser,
+        role: 'donor',
+        status: 'active',
+        createdAt: new Date()
+      };
+
+      const result = await usersCollection.insertOne(userToSave);
+      res.send(result);
+    });
+
+    // 2. GET All Requests (Public)
     app.get("/donation-requests", async (req, res) => {
-      const result = await requestsCol.find().sort({ createdAt: -1 }).toArray();
+      const result = await requestsCollection.find().sort({ createdAt: -1 }).toArray();
+      res.send(result);
+    });
+
+    // 3. Search Donors API (Public)
+    app.get('/donors', async (req, res) => {
+      const { bloodGroup, district, upazila } = req.query;
+
+      // Base Query: Only show active donors
+      let query = { role: 'donor', status: 'active' };
+
+      // Add filters if provided
+      if (bloodGroup) query.bloodGroup = bloodGroup;
+      if (district) query.district = district;
+      if (upazila) query.upazila = upazila;
+
+      const result = await usersCollection.find(query, {
+        projection: { password: 0 }
+      }).toArray();
+
       res.send(result);
     });
 
