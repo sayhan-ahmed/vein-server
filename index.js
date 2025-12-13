@@ -127,33 +127,21 @@ async function run() {
 
     // ----------------------------------------------------------------- //
 
-    // 1. POST User
-    app.post("/donors", async (req, res) => {
-      const user = req.body;
+    // 6. Update Donation Status (Donate Button Action)
+    app.patch("/donation-requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+      const query = { _id: new ObjectId(id) };
 
-      // 1. Check if user already exists
-      const query = { email: user.email };
-      const existingUser = await usersCollection.findOne(query);
-
-      if (existingUser) {
-        return res.send({ message: "User already exists", insertedId: null });
-      }
-
-      // 2. Prepare user data with required defaults
-      const userToSave = {
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-        bloodGroup: user.bloodGroup,
-        district: user.district,
-        upazila: user.upazila,
-        role: "donor",
-        status: "active",
-        createdAt: new Date(),
+      const updateDoc = {
+        $set: {
+          donationStatus: "inprogress",
+          donorName: body.donorName,
+          donorEmail: body.donorEmail,
+        },
       };
 
-      // 3. Save to Database
-      const result = await usersCollection.insertOne(userToSave);
+      const result = await requestsCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
