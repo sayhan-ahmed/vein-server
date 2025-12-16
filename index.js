@@ -34,7 +34,7 @@ const verifyToken = (req, res, next) => {
     if (err) {
       return res.status(401).send({ message: "unauthorized access" });
     }
-    req.user = decoded; 
+    req.user = decoded;
     next();
   });
 };
@@ -196,6 +196,15 @@ async function run() {
 
       const result = await requestsCollection.updateOne(query, updateDoc);
       res.send(result);
+    });
+
+    // ----------------------------------------------------------------- //
+
+    // 7. Get User Role
+    app.get('/users/role/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email });
+      res.send({ role: result?.role });
     });
 
     // === Ping MongoDB ===
