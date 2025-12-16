@@ -201,13 +201,27 @@ async function run() {
     // ----------------------------------------------------------------- //
 
     // 7. Get User Role
-    app.get('/users/role/:email', verifyToken, async (req, res) => {
+    app.get("/users/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role });
     });
 
-    // === Ping MongoDB ===
+    // 8. Get My Donation Requests (Logged-in User Only)
+    app.get("/donation-requests/my", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { requesterEmail: email };
+
+      // Security: Ensure the token belongs to the requested email
+      if (req.user.email !== req.query.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      const result = await requestsCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
     console.error("MongoDB connection failed:", error);
