@@ -1,7 +1,9 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -10,13 +12,14 @@ const port = process.env.PORT || 3000;
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", // Your Local Frontend
-      "https://vein-client.vercel.app", // Your Vercel Link (Add this later)
+      "http://localhost:5173", //Local
+      "https://vein-client.vercel.app", //Production
     ],
     credentials: true,
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
 // MongoDB URI
 const uri = process.env.MONGODB_URI;
@@ -47,6 +50,38 @@ async function run() {
     const db = client.db("vein");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("donationRequests");
+
+    // ================= JWT AUTH ROUTES ================= //
+
+    // Generate JWT Token (Login)
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+
+      // Create the token
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+
+      // Send token in a secure cookie
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
+
+    // Logout (Clear Token)
+    app.post("/logout", (req, res) => {
+      res
+        .clearCookie("token", {
+          maxAge: 0,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
 
     // ================= ROUTES ================= //
 
