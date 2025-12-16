@@ -213,13 +213,21 @@ async function run() {
       res.send(result);
     });
 
-   // 8. Get Specific Request Details API
-   app.get("/donation-requests/:id", async (req, res) => {
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await requestsCollection.findOne(query);
-    res.send(result);
-  });
+    // 8. Get Specific Request Details API
+    app.get("/donation-requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await requestsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // 9. Admin Stats (Dashboard Home)
+    app.get("/admin-stats", verifyToken, async (req, res) => {
+      const users = await usersCollection.estimatedDocumentCount();
+      const requests = await requestsCollection.estimatedDocumentCount();
+      res.send({ users, requests });
+    });
+
     // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
