@@ -228,6 +228,13 @@ async function run() {
       res.send({ users, requests });
     });
 
+    // 10. Get All Users (Admin Only)
+    app.get("/users", verifyToken, async (req, res) => {
+      // Todo: Add verifyAdmin middleware here later
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
     // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
