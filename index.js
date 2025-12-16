@@ -134,15 +134,7 @@ async function run() {
       res.send(result);
     });
 
-    // 3. Get Specific Request Details API
-    app.get("/donation-requests/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await requestsCollection.findOne(query);
-      res.send(result);
-    });
-
-    // 4. Create Donation Request API
+    // 3. Create Donation Request API
     app.post("/donation-requests", async (req, res) => {
       const request = req.body;
 
@@ -157,7 +149,7 @@ async function run() {
       res.send(result);
     });
 
-    // 5. Search Donors API (Public)
+    // 4. Search Donors API (Public)
     app.get("/donors", async (req, res) => {
       const { bloodGroup, district, upazila } = req.query;
 
@@ -180,7 +172,7 @@ async function run() {
 
     // ----------------------------------------------------------------- //
 
-    // 6. Update Donation Status (Donate Button Action)
+    // 5. Update Donation Status (Donate Button Action)
     app.patch("/donation-requests/:id", async (req, res) => {
       const id = req.params.id;
       const body = req.body;
@@ -200,14 +192,14 @@ async function run() {
 
     // ----------------------------------------------------------------- //
 
-    // 7. Get User Role
+    // 6. Get User Role
     app.get("/users/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role });
     });
 
-    // 8. Get My Donation Requests (Logged-in User Only)
+    // 7. Get My Donation Requests (Logged-in User Only)
     app.get("/donation-requests/my", verifyToken, async (req, res) => {
       const email = req.query.email;
       const query = { requesterEmail: email };
@@ -221,6 +213,13 @@ async function run() {
       res.send(result);
     });
 
+   // 8. Get Specific Request Details API
+   app.get("/donation-requests/:id", async (req, res) => {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await requestsCollection.findOne(query);
+    res.send(result);
+  });
     // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
