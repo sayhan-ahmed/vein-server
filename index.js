@@ -245,6 +245,22 @@ async function run() {
       res.send(result);
     });
 
+    // 12. Get Specific User (for Role & Blocked Status)
+    app.get("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
+
+    // 13. Delete Donation Request
+    app.delete("/donation-requests/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await requestsCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
