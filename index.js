@@ -179,12 +179,18 @@ async function run() {
       const query = { _id: new ObjectId(id) };
 
       const updateDoc = {
-        $set: {
-          donationStatus: "inprogress",
-          donorName: body.donorName,
-          donorEmail: body.donorEmail,
-        },
+        $set: {},
       };
+
+      // If frontend sends a status (like 'done' or 'canceled'), save it!
+      if (body.donationStatus) {
+        updateDoc.$set.donationStatus = body.donationStatus;
+      }
+
+      if (body.donorName && body.donorEmail) {
+        updateDoc.$set.donorName = body.donorName;
+        updateDoc.$set.donorEmail = body.donorEmail;
+      }
 
       const result = await requestsCollection.updateOne(query, updateDoc);
       res.send(result);
