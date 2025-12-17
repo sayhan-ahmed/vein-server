@@ -172,25 +172,17 @@ async function run() {
 
     // ----------------------------------------------------------------- //
 
-    // 5. Update Donation Status (Donate Button Action)
-    app.patch("/donation-requests/:id", async (req, res) => {
+    // 5. Update Donation Request
+    app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const body = req.body;
       const query = { _id: new ObjectId(id) };
 
       const updateDoc = {
-        $set: {},
+        $set: { ...body },
       };
-
-      // If frontend sends a status (like 'done' or 'canceled'), save it!
-      if (body.donationStatus) {
-        updateDoc.$set.donationStatus = body.donationStatus;
-      }
-
-      if (body.donorName && body.donorEmail) {
-        updateDoc.$set.donorName = body.donorName;
-        updateDoc.$set.donorEmail = body.donorEmail;
-      }
+      // Remove _id to avoid modification error
+      delete updateDoc.$set._id;
 
       const result = await requestsCollection.updateOne(query, updateDoc);
       res.send(result);
