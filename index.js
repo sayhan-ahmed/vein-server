@@ -188,16 +188,39 @@ async function run() {
       res.send(result);
     });
 
+    // 6. Update User Profile
+    app.patch("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const query = { email: email };
+
+      const updateDoc = {
+        $set: {
+          ...user,
+          role: undefined,
+          email: undefined,
+        },
+      };
+
+      // Clean undefined fields
+      Object.keys(updateDoc.$set).forEach(
+        (key) => updateDoc.$set[key] === undefined && delete updateDoc.$set[key]
+      );
+
+      const result = await usersCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
     // ----------------------------------------------------------------- //
 
-    // 6. Get User Role
+    // 7. Get User Role
     app.get("/users/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role });
     });
 
-    // 7. Get My Donation Requests (Logged-in User Only)
+    // 8. Get My Donation Requests (Logged-in User Only)
     app.get("/donation-requests/my", verifyToken, async (req, res) => {
       const email = req.query.email;
       const query = { requesterEmail: email };
@@ -211,7 +234,7 @@ async function run() {
       res.send(result);
     });
 
-    // 8. Get Specific Request Details API
+    // 9. Get Specific Request Details API
     app.get("/donation-requests/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -219,21 +242,21 @@ async function run() {
       res.send(result);
     });
 
-    // 9. Admin Stats (Dashboard Home)
+    // 10. Admin Stats (Dashboard Home)
     app.get("/admin-stats", verifyToken, async (req, res) => {
       const users = await usersCollection.estimatedDocumentCount();
       const requests = await requestsCollection.estimatedDocumentCount();
       res.send({ users, requests });
     });
 
-    // 10. Get All Users (Admin Only)
+    // 11. Get All Users (Admin Only)
     app.get("/users", verifyToken, async (req, res) => {
       // Todo: Add verifyAdmin middleware here later
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
 
-    // 11. Update User Status (Block/Active)
+    // 12. Update User Status (Block/Active)
     app.patch("/users/status/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const { status } = req.body;
@@ -243,7 +266,7 @@ async function run() {
       res.send(result);
     });
 
-    // 12. Get Specific User (for Role & Blocked Status)
+    // 13. Get Specific User (for Role & Blocked Status)
     app.get("/users/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
@@ -251,7 +274,7 @@ async function run() {
       res.send(result);
     });
 
-    // 13. Delete Donation Request
+    // 14. Delete Donation Request
     app.delete("/donation-requests/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
