@@ -73,10 +73,10 @@ async function run() {
 
     // Generate JWT Token (Login)
     app.post("/jwt", async (req, res) => {
-      const user = req.body;
+      const userInfo = req.body;
 
       // Create the token
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+      const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "1h",
       });
 
@@ -85,7 +85,8 @@ async function run() {
         .cookie("token", token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 3600000,
         })
         .send({ success: true });
     });
@@ -94,9 +95,9 @@ async function run() {
     app.post("/logout", (req, res) => {
       res
         .clearCookie("token", {
-          maxAge: 0,
+          httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         })
         .send({ success: true });
     });
@@ -256,12 +257,18 @@ async function run() {
       res.send(result);
     });
 
-    // 12. Update User Status (Block/Active)
-    app.patch("/users/status/:id", verifyToken, async (req, res) => {
+    // 12. Update User (Generic for Role & Status)
+    app.patch("/users/update/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const { status } = req.body;
+      const updateData = req.body;
       const filter = { _id: new ObjectId(id) };
-      const updateDoc = { $set: { status: status } };
+
+      const updateDoc = {
+        $set: { ...updateData },
+      };
+
+      // Safety: Ensure _id is not in the update document
+      delete updateDoc.$set._id;
       const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
