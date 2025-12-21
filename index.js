@@ -64,7 +64,7 @@ app.get("/", (req, res) => {
 async function run() {
   try {
     // Connect to MongoDB
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("vein");
     const usersCollection = db.collection("users");
