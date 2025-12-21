@@ -68,6 +68,7 @@ async function run() {
     const db = client.db("vein");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("donationRequests");
+    const fundingCollection = db.collection("fundings");
 
     // ================= JWT AUTH ROUTES ================= //
 
@@ -247,7 +248,20 @@ async function run() {
     app.get("/admin-stats", verifyToken, async (req, res) => {
       const users = await usersCollection.estimatedDocumentCount();
       const requests = await requestsCollection.estimatedDocumentCount();
-      res.send({ users, requests });
+
+      const fundingData = await fundingCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalAmount: { $sum: "$amount" },
+            },
+          },
+        ])
+        .toArray();
+
+      const funding = fundingData.length > 0 ? fundingData[0].totalAmount : 0;
+      res.send({ users, requests, funding });
     });
 
     // 11. Get All Users (Admin Only)
@@ -289,6 +303,25 @@ async function run() {
       res.send(result);
     });
 
+    // ====================== Funding ====================== //
+    app.post("/funding", verifyToken, async (req, res) => {
+      const funding = req.body;
+      const newFunding = {
+        ...funding,
+        amount: parseFloat(funding.amount),
+        createdAt: new Date(),
+      };
+      const result = await fundingCollection.insertOne(newFunding);
+      res.send(result);
+    });
+    // 16. Get All Funding (Admin/Volunteer)
+    app.get("/funding", verifyToken, async (req, res) => {
+      const result = await fundingCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
     // ==================== Ping MongoDB ==================== //
     console.log("Connected to MongoDB! (Vein Database)");
   } catch (error) {
