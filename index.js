@@ -153,10 +153,20 @@ async function run() {
 
       // --- Automatic Notification Trigger: New Request ---
       try {
-        // Find Donors + Admins
+        // Find Matching Donors + Admins
         const recipients = await usersCollection
           .find({
-            $or: [{ role: "donor", status: "active" }, { role: "admin" }],
+            $or: [
+              // 1. Matching Donors (Same Blood Group + Same District)
+              {
+                role: "donor",
+                status: "active",
+                bloodGroup: newRequest.bloodGroup,
+                district: newRequest.recipientDistrict,
+              },
+              // 2. Admins (Always receive all requests)
+              { role: "admin" },
+            ],
           })
           .toArray();
 
@@ -441,6 +451,32 @@ async function run() {
       const result = await notificationsCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
+
+    // 21. Mark ALL Notifications as Read
+    app.patch(
+      "/notifications/mark-all-read/user",
+      verifyToken,
+      async (req, res) => {
+        const email = req.query.email;
+
+        // Security check
+        if (req.user.email !== email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
+
+        const filter = { email: email, isRead: false };
+        const updateDoc = {
+          $set: {
+            isRead: true,
+          },
+        };
+        const result = await notificationsCollection.updateMany(
+          filter,
+          updateDoc
+        );
+        res.send(result);
+      }
+    );
 
     // ==================== Payment ==================== //
     // 17. Stripe payment API
