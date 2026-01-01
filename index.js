@@ -73,7 +73,8 @@ async function run() {
 
     // ================= JWT AUTH ROUTES ================= //
 
-    // Generate JWT Token (Login)
+    // ============ for live link ============ //
+    // // Generate JWT Token (Login)
     app.post("/jwt", async (req, res) => {
       const userInfo = req.body;
 
@@ -149,6 +150,32 @@ async function run() {
       };
 
       const result = await requestsCollection.insertOne(newRequest);
+
+      // --- Automatic Notification Trigger: New Request ---
+      try {
+        // Find Donors + Admins
+        const recipients = await usersCollection
+          .find({
+            $or: [{ role: "donor", status: "active" }, { role: "admin" }],
+          })
+          .toArray();
+
+        if (recipients.length > 0) {
+          const notifications = recipients.map((user) => ({
+            email: user.email,
+            message: `New ${newRequest.bloodGroup} blood request in ${newRequest.recipientDistrict}!`,
+            link: `/donation-requests/${result.insertedId}`,
+            isRead: false,
+            createdAt: new Date(),
+          }));
+
+          await notificationsCollection.insertMany(notifications);
+        }
+      } catch (err) {
+        console.error("Failed to send new request notifications:", err);
+      }
+      // ---------------------------------------------------
+
       res.send(result);
     });
 
@@ -188,6 +215,27 @@ async function run() {
       delete updateDoc.$set._id;
 
       const result = await requestsCollection.updateOne(query, updateDoc);
+
+      // --- Automatic Notification Trigger: Status Change ---
+      // Notify the requester when status changes (e.g. to "inprogress" or "done")
+      try {
+        if (body.donationStatus) {
+          const request = await requestsCollection.findOne(query);
+          if (request) {
+            const notification = {
+              email: request.requesterEmail,
+              message: `Your blood request status has updated to: ${body.donationStatus}`,
+              isRead: false,
+              createdAt: new Date(),
+            };
+            await notificationsCollection.insertOne(notification);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to send status update notification:", err);
+      }
+      // ---------------------------------------------------
+
       res.send(result);
     });
 
@@ -314,6 +362,25 @@ async function run() {
         createdAt: new Date(),
       };
       const result = await fundingCollection.insertOne(newFunding);
+
+      // --- Automatic Notification Trigger: New Funding ---
+      try {
+        const admins = await usersCollection.find({ role: "admin" }).toArray();
+        if (admins.length > 0) {
+          const notifications = admins.map((admin) => ({
+            email: admin.email,
+            message: `New funding received: $${newFunding.amount}`,
+            link: `/dashboard`,
+            isRead: false,
+            createdAt: new Date(),
+          }));
+          await notificationsCollection.insertMany(notifications);
+        }
+      } catch (err) {
+        console.error("Failed to send funding notifications:", err);
+      }
+      // ---------------------------------------------------
+
       res.send(result);
     });
     // 16. Get All Funding (Admin/Volunteer)
@@ -322,6 +389,56 @@ async function run() {
         .find()
         .sort({ createdAt: -1 })
         .toArray();
+      res.send(result);
+    });
+
+    // ==================== Notifications ==================== //
+    const notificationsCollection = db.collection("notifications");
+
+    // Create TTL Index: Auto-delete notifications after 30 days
+    // 30 days * 24 hours * 60 minutes * 60 seconds = 2592000 seconds
+    // Note: This operation is idempotent (won't error if index exists)
+    await notificationsCollection.createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 2592000 }
+    );
+
+    // 18. POST Notification
+    app.post("/notifications", verifyToken, async (req, res) => {
+      const notification = req.body;
+      const newNotification = {
+        ...notification,
+        isRead: false,
+        createdAt: new Date(),
+      };
+      const result = await notificationsCollection.insertOne(newNotification);
+      res.send(result);
+    });
+
+    // 19. GET Notifications (User specific)
+    app.get("/notifications", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      if (req.user.email !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const result = await notificationsCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
+    // 20. Mark Notification as Read
+    app.patch("/notifications/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          isRead: true,
+        },
+      };
+      const result = await notificationsCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
 
