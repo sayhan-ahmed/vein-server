@@ -150,6 +150,20 @@ app.get("/donation-requests", async (req, res) => {
 app.post("/donation-requests", verifyToken, async (req, res) => {
   const request = req.body;
 
+  // Date Validation: Don't allow past dates
+  if (request.donationDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const reqDate = new Date(request.donationDate);
+    reqDate.setHours(0, 0, 0, 0);
+
+    if (reqDate < today) {
+      return res.status(400).send({
+        message: "Donation date cannot be in the past.",
+      });
+    }
+  }
+
   const newRequest = {
     ...request,
     donationStatus: "pending",
