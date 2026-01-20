@@ -84,13 +84,11 @@ async function run() {
         expiresIn: "1h",
       });
 
-      const isSecure = req.secure || req.get("x-forwarded-proto") === "https";
-
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: isSecure,
-          sameSite: isSecure ? "none" : "lax",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
           maxAge: 3600000,
         })
         .send({ success: true });
@@ -98,12 +96,11 @@ async function run() {
 
     // Logout (Clear Token)
     app.post("/logout", (req, res) => {
-      const isSecure = req.secure || req.get("x-forwarded-proto") === "https";
       res
         .clearCookie("token", {
           httpOnly: true,
-          secure: isSecure,
-          sameSite: isSecure ? "none" : "lax",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
           maxAge: 0,
         })
         .send({ success: true });
