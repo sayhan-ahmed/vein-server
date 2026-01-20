@@ -139,6 +139,16 @@ app.post("/users", async (req, res) => {
 
 // 2. GET All Requests (Public)
 app.get("/donation-requests", async (req, res) => {
+  // Lazy Expiration: Mark past pending requests as expired
+  const todayStr = new Date().toISOString().split("T")[0];
+  await requestsCollection.updateMany(
+    {
+      donationStatus: "pending",
+      donationDate: { $lt: todayStr },
+    },
+    { $set: { donationStatus: "expired" } },
+  );
+
   const result = await requestsCollection
     .find()
     .sort({ createdAt: -1 })
@@ -183,8 +193,8 @@ app.post("/donation-requests", verifyToken, async (req, res) => {
             bloodGroup: newRequest.bloodGroup,
             district: newRequest.recipientDistrict,
           },
-          { role: "admin" },
-          { role: "volunteer" },
+          { role: /admin/i, status: "active" },
+          { role: /volunteer/i, status: "active" },
         ],
       })
       .toArray();
@@ -199,6 +209,7 @@ app.post("/donation-requests", verifyToken, async (req, res) => {
       }));
 
       await notificationsCollection.insertMany(notifications);
+      console.log(`Notifications sent to ${recipients.length} users.`);
     }
   } catch (err) {
     console.error("Failed to send new request notifications:", err);
@@ -227,6 +238,17 @@ app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
   const id = req.params.id;
   const body = req.body;
   const query = { _id: new ObjectId(id) };
+
+  // Prevent donating to expired requests
+  if (body.donationStatus === "inprogress") {
+    const checkRequest = await requestsCollection.findOne(query);
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (checkRequest && checkRequest.donationDate < todayStr) {
+      return res.status(400).send({
+        message: "Cannot donate to an expired request.",
+      });
+    }
+  }
 
   const updateDoc = { $set: { ...body } };
   delete updateDoc.$set._id;
@@ -316,6 +338,18 @@ app.get("/donation-requests/my", verifyToken, async (req, res) => {
   if (req.user.email !== email) {
     return res.status(403).send({ message: "forbidden access" });
   }
+
+  // Lazy Expiration for this user's requests
+  const todayStr = new Date().toISOString().split("T")[0];
+  await requestsCollection.updateMany(
+    {
+      requesterEmail: email,
+      donationStatus: "pending",
+      donationDate: { $lt: todayStr },
+    },
+    { $set: { donationStatus: "expired" } },
+  );
+
   const query = { requesterEmail: email };
   const result = await requestsCollection.find(query).toArray();
   res.send(result);
@@ -325,8 +359,23 @@ app.get("/donation-requests/my", verifyToken, async (req, res) => {
 app.get("/donation-requests/:id", async (req, res) => {
   const id = req.params.id;
   const query = { _id: new ObjectId(id) };
-  const result = await requestsCollection.findOne(query);
-  res.send(result);
+
+  // Lazy Expiration for this single item
+  const todayStr = new Date().toISOString().split("T")[0];
+  const request = await requestsCollection.findOne(query);
+
+  if (
+    request &&
+    request.donationStatus === "pending" &&
+    request.donationDate < todayStr
+  ) {
+    await requestsCollection.updateOne(query, {
+      $set: { donationStatus: "expired" },
+    });
+    request.donationStatus = "expired";
+  }
+
+  res.send(request);
 });
 
 // 10. Admin Stats
@@ -395,7 +444,10 @@ app.post("/funding", verifyToken, async (req, res) => {
 
   try {
     const adminsAndVolunteers = await usersCollection
-      .find({ role: { $in: ["admin", "volunteer"] } })
+      .find({
+        role: { $in: [/admin/i, /volunteer/i] },
+        status: "active",
+      })
       .toArray();
     if (adminsAndVolunteers.length > 0) {
       const notifications = adminsAndVolunteers.map((user) => ({
@@ -406,6 +458,9 @@ app.post("/funding", verifyToken, async (req, res) => {
         createdAt: new Date(),
       }));
       await notificationsCollection.insertMany(notifications);
+      console.log(
+        `Funding notifications sent to ${adminsAndVolunteers.length} users.`,
+      );
     }
   } catch (err) {
     console.error("Failed to send funding notifications:", err);
