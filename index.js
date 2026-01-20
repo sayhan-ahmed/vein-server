@@ -10,14 +10,16 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
+app.set("trust proxy", 1);
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", //Local
-      "https://vein-client.vercel.app", //Production
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://vein-client.vercel.app",
     ],
     credentials: true,
-  })
+  }),
 );
 app.use(express.json());
 app.use(cookieParser());
@@ -75,20 +77,20 @@ async function run() {
 
     // ============ for live link ============ //
     // // Generate JWT Token (Login)
+    // Generate JWT Token (Login)
     app.post("/jwt", async (req, res) => {
       const userInfo = req.body;
-
-      // Create the token
       const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "1h",
       });
 
-      // Send token in a secure cookie
+      const isSecure = req.secure || req.get("x-forwarded-proto") === "https";
+
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: true,
-          sameSite: "lax",
+          secure: isSecure,
+          sameSite: isSecure ? "none" : "lax",
           maxAge: 3600000,
         })
         .send({ success: true });
@@ -96,11 +98,13 @@ async function run() {
 
     // Logout (Clear Token)
     app.post("/logout", (req, res) => {
+      const isSecure = req.secure || req.get("x-forwarded-proto") === "https";
       res
         .clearCookie("token", {
           httpOnly: true,
-          secure: true,
-          sameSite: "lax",
+          secure: isSecure,
+          sameSite: isSecure ? "none" : "lax",
+          maxAge: 0,
         })
         .send({ success: true });
     });
@@ -265,7 +269,8 @@ async function run() {
 
       // Clean undefined fields
       Object.keys(updateDoc.$set).forEach(
-        (key) => updateDoc.$set[key] === undefined && delete updateDoc.$set[key]
+        (key) =>
+          updateDoc.$set[key] === undefined && delete updateDoc.$set[key],
       );
 
       const result = await usersCollection.updateOne(query, updateDoc);
@@ -405,12 +410,10 @@ async function run() {
     // ==================== Notifications ==================== //
     const notificationsCollection = db.collection("notifications");
 
-    // Create TTL Index: Auto-delete notifications after 30 days
-    // 30 days * 24 hours * 60 minutes * 60 seconds = 2592000 seconds
-    // Note: This operation is idempotent (won't error if index exists)
+    // Create TTL Index
     await notificationsCollection.createIndex(
       { createdAt: 1 },
-      { expireAfterSeconds: 2592000 }
+      { expireAfterSeconds: 2592000 },
     );
 
     // 18. POST Notification
@@ -472,10 +475,10 @@ async function run() {
         };
         const result = await notificationsCollection.updateMany(
           filter,
-          updateDoc
+          updateDoc,
         );
         res.send(result);
-      }
+      },
     );
 
     // ==================== Payment ==================== //
