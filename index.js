@@ -9,7 +9,8 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
+// ================= [ CONFIGURATION ] ================= //
+// > Setup CORS, JSON parsing, and secure cookie middleware.
 app.set("trust proxy", 1);
 app.use(
   cors({
@@ -24,7 +25,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// JWT
+// ================= [ AUTHENTICATION ] ================= //
+// > Verify JWT from cookies for protected routes.
 const verifyToken = (req, res, next) => {
   const token = req.cookies?.token;
 
@@ -32,7 +34,6 @@ const verifyToken = (req, res, next) => {
     return res.status(401).send({ message: "unauthorized access" });
   }
 
-  // Verify the token
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
     if (err) {
       return res.status(401).send({ message: "unauthorized access" });
@@ -42,7 +43,8 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// MongoDB URI
+// ================= [ DATABASE ] ================= //
+// > Connection string and collection initialization.
 const uri = process.env.MONGODB_URI;
 if (!uri) {
   console.error("MONGODB_URI is not set in .env");
@@ -70,7 +72,8 @@ async function run() {
     await client.connect();
     console.log("Connected to MongoDB! (Vein Database)");
 
-    // ================== INITIALIZATION ================== //
+    // ================= [ DATABASE ] ================= //
+    // > Setup TTL index for automated notification purging.
     try {
       await notificationsCollection.createIndex(
         { createdAt: 1 },
@@ -85,8 +88,8 @@ async function run() {
 }
 run().catch(console.dir);
 
-// ================= JWT AUTH ROUTES ================= //
-
+// ================= [ SESSION ] ================= //
+// > Issue secure JWT and set cookie.
 app.post("/jwt", async (req, res) => {
   const userInfo = req.body;
   const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
@@ -114,9 +117,8 @@ app.post("/logout", (req, res) => {
     .send({ success: true });
 });
 
-// ================= ROUTES ================= //
-
-// 1. POST User (Registration)
+// ================= [ USER MANAGEMENT ] ================= //
+// > Handle user registration and status lookups.
 app.post("/users", async (req, res) => {
   const newUser = req.body;
   const query = { email: newUser.email };
@@ -137,9 +139,10 @@ app.post("/users", async (req, res) => {
   res.send(result);
 });
 
-// 2. GET All Requests (Public)
+// ================= [ DONATION REQUESTS ] ================= //
+// > Manage blood request lifecycle and automated expiration.
 app.get("/donation-requests", async (req, res) => {
-  // Lazy Expiration: Mark past pending requests as expired
+  // > Maintain: Auto-expire past pending requests.
   const todayStr = new Date().toISOString().split("T")[0];
   await requestsCollection.updateMany(
     {
@@ -156,7 +159,7 @@ app.get("/donation-requests", async (req, res) => {
   res.send(result);
 });
 
-// 3. Create Donation Request
+// > [ Action ]: Create new request and notify nearby donors.
 app.post("/donation-requests", verifyToken, async (req, res) => {
   const request = req.body;
 
@@ -182,7 +185,7 @@ app.post("/donation-requests", verifyToken, async (req, res) => {
 
   const result = await requestsCollection.insertOne(newRequest);
 
-  // Notifications
+  // Community Notification System
   try {
     const recipients = await usersCollection
       .find({
@@ -209,16 +212,16 @@ app.post("/donation-requests", verifyToken, async (req, res) => {
       }));
 
       await notificationsCollection.insertMany(notifications);
-      console.log(`Notifications sent to ${recipients.length} users.`);
     }
   } catch (err) {
-    console.error("Failed to send new request notifications:", err);
+    // Fail-safe: Notifications should not block the primary request flow
   }
 
   res.send(result);
 });
 
-// 4. Search Donors
+// ================= [ DONOR SEARCH ] ================= //
+// > Filter active donors by blood group and location.
 app.get("/donors", async (req, res) => {
   const { bloodGroup, district, upazila } = req.query;
   let query = { role: "donor", status: "active" };
@@ -233,13 +236,13 @@ app.get("/donors", async (req, res) => {
   res.send(result);
 });
 
-// 5. Update Donation Request
+// > [ Action ]: Update status and notify requester.
 app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
   const id = req.params.id;
   const body = req.body;
   const query = { _id: new ObjectId(id) };
 
-  // Prevent donating to expired requests
+  // Validation: Prevent status updates for past-due requests
   if (body.donationStatus === "inprogress") {
     const checkRequest = await requestsCollection.findOne(query);
     const todayStr = new Date().toISOString().split("T")[0];
@@ -255,6 +258,7 @@ app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
 
   const result = await requestsCollection.updateOne(query, updateDoc);
 
+  // Status Change Notification
   try {
     if (body.donationStatus) {
       const request = await requestsCollection.findOne(query);
@@ -269,13 +273,14 @@ app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
       }
     }
   } catch (err) {
-    console.error("Failed to send status update notification:", err);
+    // Fail-safe for notifications
   }
 
   res.send(result);
 });
 
-// 6. Update User Profile
+// ================= [ PROFILE ] ================= //
+// > Update user metadata and status.
 app.patch("/users/:email", verifyToken, async (req, res) => {
   const email = req.params.email;
   const user = req.body;
@@ -332,14 +337,15 @@ app.get("/users/role/:email", verifyToken, async (req, res) => {
   res.send({ role: result?.role });
 });
 
-// 8. Get My Donation Requests
+// ================= [ USER HISTORY ] ================= //
+// > Aggregate user-specific requests and donations.
 app.get("/donation-requests/my", verifyToken, async (req, res) => {
   const email = req.query.email;
   if (req.user.email !== email) {
     return res.status(403).send({ message: "forbidden access" });
   }
 
-  // Lazy Expiration for this user's requests
+  // Maintenance: Expire past-due pending requests for this user
   const todayStr = new Date().toISOString().split("T")[0];
   await requestsCollection.updateMany(
     {
@@ -355,12 +361,13 @@ app.get("/donation-requests/my", verifyToken, async (req, res) => {
   res.send(result);
 });
 
-// 9. Get Specific Request
+// ================= [ DETAILS ] ================= //
+// > Fetch metadata for single donation request.
 app.get("/donation-requests/:id", async (req, res) => {
   const id = req.params.id;
   const query = { _id: new ObjectId(id) };
 
-  // Lazy Expiration for this single item
+  // Maintenance: Check and expire if the single request is past-due
   const todayStr = new Date().toISOString().split("T")[0];
   const request = await requestsCollection.findOne(query);
 
@@ -378,7 +385,8 @@ app.get("/donation-requests/:id", async (req, res) => {
   res.send(request);
 });
 
-// 10. Admin Stats
+// ================= [ STATISTICS ] ================= //
+// > Compute platform metrics for admin dashboard.
 app.get("/admin-stats", verifyToken, verifyVolunteer, async (req, res) => {
   const users = await usersCollection.estimatedDocumentCount();
   const requests = await requestsCollection.estimatedDocumentCount();
@@ -432,7 +440,8 @@ app.delete("/donation-requests/:id", verifyToken, async (req, res) => {
   res.send(result);
 });
 
-// 15. POST Funding
+// ================= [ FUNDING ] ================= //
+// > Record contributions and notify management.
 app.post("/funding", verifyToken, async (req, res) => {
   const funding = req.body;
   const newFunding = {
@@ -442,6 +451,7 @@ app.post("/funding", verifyToken, async (req, res) => {
   };
   const result = await fundingCollection.insertOne(newFunding);
 
+  // Alert Management of new support
   try {
     const adminsAndVolunteers = await usersCollection
       .find({
@@ -458,12 +468,9 @@ app.post("/funding", verifyToken, async (req, res) => {
         createdAt: new Date(),
       }));
       await notificationsCollection.insertMany(notifications);
-      console.log(
-        `Funding notifications sent to ${adminsAndVolunteers.length} users.`,
-      );
     }
   } catch (err) {
-    console.error("Failed to send funding notifications:", err);
+    // Fail-safe
   }
 
   res.send(result);
@@ -531,7 +538,8 @@ app.patch(
   },
 );
 
-// 21. Stripe
+// ================= [ PAYMENTS ] ================= //
+// > Orchestrate Stripe payment intent creation.
 app.post("/create-payment-intent", verifyToken, async (req, res) => {
   const { price } = req.body;
   const amount = parseInt(price * 100);
