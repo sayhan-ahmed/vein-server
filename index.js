@@ -386,6 +386,44 @@ app.get("/donation-requests/:id", async (req, res) => {
 });
 
 // ================= [ STATISTICS ] ================= //
+// > Public statistics for landing page.
+app.get("/public-stats", async (req, res) => {
+  try {
+    const totalDonors = await usersCollection.countDocuments({
+      role: "donor",
+      status: "active",
+    });
+    const pendingRequests = await requestsCollection.countDocuments({
+      donationStatus: "pending",
+    });
+    const totalRequests = await requestsCollection.estimatedDocumentCount();
+    const totalDonations = await requestsCollection.countDocuments({
+      donationStatus: "done",
+    });
+    const fundingContributions =
+      await fundingCollection.estimatedDocumentCount();
+
+    // Aggregation for unique districts (Avoids strict API 'distinct' limitation)
+    const uniqueDistrictsData = await requestsCollection
+      .aggregate([{ $group: { _id: "$recipientDistrict" } }])
+      .toArray();
+
+    res.send({
+      totalDonors,
+      pendingRequests,
+      totalRequests,
+      totalDonations,
+      fundingContributions,
+      totalDistricts: uniqueDistrictsData.length,
+    });
+  } catch (error) {
+    console.error("PUBLIC_STATS_ERROR:", error);
+    res
+      .status(500)
+      .send({ message: "Failed to fetch stats", error: error.message });
+  }
+});
+
 // > Compute platform metrics for admin dashboard.
 app.get("/admin-stats", verifyToken, verifyVolunteer, async (req, res) => {
   const users = await usersCollection.estimatedDocumentCount();
