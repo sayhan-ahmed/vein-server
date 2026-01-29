@@ -66,6 +66,7 @@ const usersCollection = db.collection("users");
 const requestsCollection = db.collection("donationRequests");
 const fundingCollection = db.collection("fundings");
 const notificationsCollection = db.collection("notifications");
+const subscribersCollection = db.collection("subscribers");
 
 async function run() {
   try {
@@ -631,6 +632,36 @@ app.post("/contact", async (req, res) => {
   } catch (error) {
     console.error("Email Error:", error);
     res.status(500).send({ success: false, message: "Failed to send email" });
+  }
+});
+
+// ================= [ NEWSLETTER ] ================= //
+// > Handle newsletter subscriptions.
+app.post("/subscribe", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).send({ message: "Email is required" });
+  }
+
+  try {
+    const existingSubscriber = await subscribersCollection.findOne({ email });
+    if (existingSubscriber) {
+      return res.send({
+        success: false,
+        message: "You are already subscribed to our newsletter.",
+      });
+    }
+
+    const result = await subscribersCollection.insertOne({
+      email,
+      createdAt: new Date(),
+    });
+
+    res.send({ success: true, message: "Successfully subscribed!", ...result });
+  } catch (error) {
+    console.error("Subscription Error:", error);
+    res.status(500).send({ message: "Failed to subscribe" });
   }
 });
 
