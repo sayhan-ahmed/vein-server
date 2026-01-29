@@ -4,6 +4,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cookieParser = require("cookie-parser");
+const nodemailer = require("nodemailer");
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 const app = express();
@@ -593,6 +594,44 @@ app.post("/create-payment-intent", verifyToken, async (req, res) => {
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
   res.status(500).send({ message: err.message });
+});
+
+// ================= [ CONTACT FORM ] ================= //
+// > Handle contact form submissions via Nodemailer.
+app.post("/contact", async (req, res) => {
+  const { name, email, phone, subject, message } = req.body;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"${name}" <${email}>`, // sender address
+      to: process.env.EMAIL_USER, // list of receivers (admin)
+      subject: `New Message from Vein: ${subject}`, // Subject line
+      html: `
+        <h3>New Contact Message</h3>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Message sent: %s", info.messageId);
+    res.send({ success: true, messageId: info.messageId });
+  } catch (error) {
+    console.error("Email Error:", error);
+    res.status(500).send({ success: false, message: "Failed to send email" });
+  }
 });
 
 app.listen(port, () => {
